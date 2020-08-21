@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Res } from '@nestjs/common';
+import { Controller, Get, Logger, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 
 import { DataService } from './data.service';
@@ -41,7 +41,7 @@ export class DataController {
         res.end(data);
       })
       .catch(err => {
-        res.statusCode = 404;
+        res.statusCode = err.status || 404;
         res.end(err.message);
       });
   }

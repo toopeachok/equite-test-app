@@ -7,6 +7,9 @@ import * as util from 'util';
 import * as memoryCache from 'memory-cache';
 
 const readFile = util.promisify(fs.readFile);
+const accessFile = util.promisify(fs.access);
+
+const filesMetaInfo = {};
 
 @Injectable()
 export class DataService {
@@ -14,9 +17,14 @@ export class DataService {
     return 'Please specify file name. For example: http://localhost:4000/data/file.txt';
   }
 
-  getFileExt(fileURL: string): string {
+  getFilePath(fileURL: string): string {
     const parsedFileURL = path.normalize(fileURL).replace(/^(\.\.[\/\\])+/, '');
-    const filePath = path.join(__dirname, '..\\..\\', parsedFileURL);
+
+    return path.join(__dirname, '..\\..\\', parsedFileURL);
+  }
+
+  getFileExt(fileURL: string): string {
+    const filePath = this.getFilePath(fileURL);
     const ext = path.parse(filePath).ext;
 
     if (ext === '') {
@@ -30,22 +38,34 @@ export class DataService {
   }
 
   async getFileData(fileURL: string): Promise<any> {
-    const parsedFileURL = path.normalize(fileURL).replace(/^(\.\.[\/\\])+/, '');
-
-    const filePath = path.join(__dirname, '..\\..\\', parsedFileURL);
+    const filePath = this.getFilePath(fileURL);
     Logger.log(filePath, 'FilePath');
 
-    const cachedData = memoryCache.get(filePath);
+    return accessFile(filePath).then(() => {
+      const cachedData = memoryCache.get(filePath);
 
-    if (cachedData) {
-      Logger.log('Getting file data from a cache', 'MemoryCacheGet');
-      return cachedData;
-    } else {
-      return readFile(filePath).then(data => {
-        memoryCache.put(filePath, data, 10000);
-        Logger.log('Getting file data from a disk', 'ReadFile');
-        return data;
-      });
-    }
+      if (cachedData) {
+        Logger.log('Getting file data from a cache', 'MemoryCacheGet');
+        return cachedData;
+      } else if (
+        !filesMetaInfo[filePath] ||
+        !filesMetaInfo[filePath].isReading
+      ) {
+        filesMetaInfo[filePath] = { isReading: true };
+
+        return readFile(filePath).then(data => {
+          filesMetaInfo[filePath] = { isReading: false };
+          memoryCache.put(filePath, data, 10000);
+          Logger.log('Getting file data from a disk', 'ReadFile');
+
+          return data;
+        });
+      } else {
+        throw new HttpException(
+          'File is already reading',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    });
   }
 }
