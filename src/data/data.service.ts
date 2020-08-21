@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as util from 'util';
 
+import * as memoryCache from 'memory-cache';
+
 const readFile = util.promisify(fs.readFile);
 
 @Injectable()
@@ -27,12 +29,23 @@ export class DataService {
     return ext;
   }
 
-  async getFileData(fileURL: string): Promise<Buffer> {
+  async getFileData(fileURL: string): Promise<any> {
     const parsedFileURL = path.normalize(fileURL).replace(/^(\.\.[\/\\])+/, '');
 
     const filePath = path.join(__dirname, '..\\..\\', parsedFileURL);
     Logger.log(filePath, 'FilePath');
 
-    return readFile(filePath);
+    const cachedData = memoryCache.get(filePath);
+
+    if (cachedData) {
+      Logger.log('Getting file data from a cache', 'MemoryCacheGet');
+      return cachedData;
+    } else {
+      return readFile(filePath).then(data => {
+        memoryCache.put(filePath, data, 10000);
+        Logger.log('Getting file data from a disk', 'ReadFile');
+        return data;
+      });
+    }
   }
 }
